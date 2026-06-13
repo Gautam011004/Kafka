@@ -1,18 +1,34 @@
-use crate::broker::Broker;
+use std::sync::Arc;
+
+use bytes::BytesMut;
+use tokio::{io::AsyncReadExt, net::{TcpListener, TcpStream}, sync::Mutex};
+
+use crate::{broker::Broker, handler::parse_message};
 
 pub mod broker;
 pub mod storage;
-fn main() {
-    let mut v = Broker::new();
-    v.create_topic("orders");
-    v.create_topic("transactions");
-    v.create_topic("liquidation");
-    v.create_group("orders".to_string());
-    v.publish("orders", "BUY 1 BTC".to_string());
-    v.publish("orders", "BUY 2 BTC".to_string());
-    v.publish("orders", "SELL 1 BTC".to_string());
-    v.publish("liquidation", "1 BTC DONE".to_string());
-    v.publish("liquidation", "2 BTC DONE".to_string());
-    v.commit("orders".to_string(), "analytics".to_string(), 2);
-    println!("{:?}, \n", v.groups.get("orders").unwrap().offsets.get("analytics").unwrap());
+pub mod handler;
+
+#[tokio::main]
+async fn main() {
+    let broker = Arc::new(Mutex::new(Broker::new()));
+    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+
+    loop {
+        let(mut socket, s) = listener.accept().await.unwrap();
+        let broker =  broker.clone();
+        tokio::spawn(handle_connection(socket, broker));
+    }
+}
+
+async fn handle_connection(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) {
+    let mut buf = BytesMut::with_capacity(512);
+    loop {
+        let n = socket.read_buf(&mut buf).await.unwrap();
+        if n == 0 {
+            println!("Disconnected");
+            break;
+        }
+        parse_message(&mut buf).await;
+    }
 }
