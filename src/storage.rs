@@ -22,7 +22,7 @@ impl LogStorage {
         }
     }
     pub fn append(&mut self, message: &Message) {
-        let line = format!("{}|{}\n", message.offset,message.payload);
+        let line = format!("{}|{}", message.offset,message.payload);
         self.file.write(line.as_bytes()).unwrap();
         self.file.flush().unwrap();
     }
@@ -36,6 +36,7 @@ impl LogStorage {
             if v[i] == b'\n' {
                 let s = str::from_utf8(&v[count..i]).unwrap();
                 count = i + 1;
+                println!("{:?}",s);
                 let (offset, payload) = s.split_once("|").unwrap();
                 messages.push(Message {
                     offset: offset.parse().unwrap(),

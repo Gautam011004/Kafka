@@ -1,4 +1,4 @@
-use std::{clone, collections::HashMap};
+use std::{clone, collections::HashMap, str::FromStr};
 
 use crate::storage::LogStorage;
 
@@ -22,6 +22,26 @@ pub struct ConsumerGroup {
     pub offsets: HashMap<String, u64>
 }
 
+#[derive(Debug)]
+pub enum Operation {
+    Publish,
+    Consume,
+    Commit
+}
+
+impl FromStr for Operation {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Publish" => Ok(Operation::Publish),
+            "Consume" => Ok(Operation::Consume),
+            "Commit"  => Ok(Operation::Commit),
+            _ => Err(format!("Error while parsing"))
+        }
+    }
+}
+
 impl Broker {
     pub fn new() -> Self {
         Self {
@@ -29,7 +49,7 @@ impl Broker {
             groups: HashMap::<String, ConsumerGroup>::new()
         }
     }
-    pub fn create_topic(&mut self, name: &str) {
+    pub fn create_topic(&mut self, name: &str) -> &mut Topic {
         let path = format!("data/{}.log", name);
         let storage = LogStorage::new(&path);
         let v = Topic{
@@ -37,10 +57,19 @@ impl Broker {
             storage: storage
         };
         self.topics.insert(name.to_string(), v);
-        self.topics.get_mut(name).unwrap().messages = self.topics.get_mut(name).unwrap().storage.load();
+        self.topics.get_mut(name).unwrap()
+
     }
     pub fn publish(&mut self, topic: &str, payload: String) {
-        let v = self.topics.get_mut(topic).unwrap();
+        let v = match self.topics.get_mut(topic) {
+            Some(value) => {
+                value.storage.load();
+                value
+            },
+            None => {
+                self.create_topic(topic)
+            }
+        };
         let logs = &mut v.storage;
         let s =  match v.messages.last(){
             Some(m) => {

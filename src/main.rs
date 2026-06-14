@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bytes::BytesMut;
 use tokio::{io::AsyncReadExt, net::{TcpListener, TcpStream}, sync::Mutex};
 
-use crate::{broker::Broker, handler::parse_message};
+use crate::{broker::Broker, handler::{parse_message, process_request}};
 
 pub mod broker;
 pub mod storage;
@@ -29,6 +29,9 @@ async fn handle_connection(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) {
             println!("Disconnected");
             break;
         }
-        parse_message(&mut buf).await;
+        let parsed_msg = parse_message(&mut buf).await;
+        let operation = parsed_msg[0].clone().parse().unwrap();
+        println!("reached here");
+        process_request(parsed_msg[1..].to_vec(), broker.clone(), operation).await;
     }
 }
