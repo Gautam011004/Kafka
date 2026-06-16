@@ -1,6 +1,6 @@
 use std::{fs::{File, OpenOptions, create_dir_all}, io::{Read, Seek, SeekFrom, Write}};
 
-use crate::broker::Message;
+use crate::types::Message;
 
 #[derive(Debug)]
 pub struct LogStorage {
@@ -22,7 +22,7 @@ impl LogStorage {
         }
     }
     pub fn append(&mut self, message: &Message) {
-        let line = format!("{}|{}", message.offset,message.payload);
+        let line = format!("{}|{}\n", message.offset,message.payload);
         self.file.write(line.as_bytes()).unwrap();
         self.file.flush().unwrap();
     }
@@ -30,13 +30,14 @@ impl LogStorage {
         let mut v = Vec::new();
         let mut messages = Vec::new();
         let mut count = 0;
+        println!("{:?}",self.file);
         self.file.seek(SeekFrom::Start(0));
         self.file.read_to_end(&mut v);
         for i in 0..v.len() {
             if v[i] == b'\n' {
                 let s = str::from_utf8(&v[count..i]).unwrap();
                 count = i + 1;
-                println!("{:?}",s);
+                println!("{:?}", s);
                 let (offset, payload) = s.split_once("|").unwrap();
                 messages.push(Message {
                     offset: offset.parse().unwrap(),

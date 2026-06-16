@@ -1,46 +1,6 @@
-use std::{clone, collections::HashMap, str::FromStr};
+use std::{collections::HashMap};
 
-use crate::storage::LogStorage;
-
-#[derive(Clone, Debug)]
-pub struct Message {
-    pub offset: u64,
-    pub payload: String
-}
-
-pub struct Topic {
-    pub messages: Vec<Message>,
-    pub storage: LogStorage
-}
-
-pub struct Broker {
-    pub topics: HashMap<String, Topic>,
-    pub groups: HashMap<String, ConsumerGroup>
-}
-
-pub struct ConsumerGroup {
-    pub offsets: HashMap<String, u64>
-}
-
-#[derive(Debug)]
-pub enum Operation {
-    Publish,
-    Consume,
-    Commit
-}
-
-impl FromStr for Operation {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Publish" => Ok(Operation::Publish),
-            "Consume" => Ok(Operation::Consume),
-            "Commit"  => Ok(Operation::Commit),
-            _ => Err(format!("Error while parsing"))
-        }
-    }
-}
+use crate::{storage::LogStorage, types::{Broker, ConsumerGroup, Message, Partitions, Topic}};
 
 impl Broker {
     pub fn new() -> Self {
@@ -49,25 +9,45 @@ impl Broker {
             groups: HashMap::<String, ConsumerGroup>::new()
         }
     }
-    pub fn create_topic(&mut self, name: &str) -> &mut Topic {
-        let path = format!("data/{}.log", name);
+    pub fn create_topic(&mut self, name: &str, id: u32) {
+        let path = format!("data/{}-{}.log", name,id);
         let storage = LogStorage::new(&path);
-        let v = Topic{
+        let p = Partitions {
+            id,
             messages: Vec::new(),
-            storage: storage
+            storage
         };
+        let mut v = Topic { partitions: Vec::new() };
+        v.partitions.push(p);
         self.topics.insert(name.to_string(), v);
-        self.topics.get_mut(name).unwrap()
-
     }
-    pub fn publish(&mut self, topic: &str, payload: String) {
+    pub fn publish(&mut self, topic: &str, payload: String, id: u32) {
         let v = match self.topics.get_mut(topic) {
             Some(value) => {
-                value.storage.load();
-                value
+                println!("here 2");
+                let s = match value.partitions.get_mut(id as usize) {
+                    Some(v) => {
+                        println!("here");
+                        v.storage.load();
+                        v
+                    },
+                    None => {
+                        let path = format!("data/{}-{}.log", topic,id);
+                        let storage = LogStorage::new(&path);
+                        value.partitions.push(Partitions { id, messages: Vec::new(), storage });
+                        let v = value.partitions.get_mut(id as usize).unwrap();
+                        v.storage.load();
+                        v
+                    }
+                };
+                s
             },
             None => {
-                self.create_topic(topic)
+                self.create_topic(topic, id);
+                let s = self.topics.get_mut(topic).unwrap();
+                let v = s.partitions.get_mut(id as usize).unwrap();
+                v.storage.load();
+                v
             }
         };
         let logs = &mut v.storage;
@@ -83,6 +63,7 @@ impl Broker {
             offset: s,
             payload
         };
+        println!("{:?}", new);
         v.messages.push(new.clone());
         logs.append(&new);
     }
@@ -92,8 +73,8 @@ impl Broker {
         };
         self.groups.entry(topic).or_insert_with(|| new);
     }
-    pub fn consume(&self, offset: u64, topic: &str) -> Vec<Message> {
-        let v = &self.topics.get(topic).unwrap().messages;
+    pub fn consume(&mut self, offset: u64, topic: &str, id: u32) -> Vec<Message> {
+        let v = &self.topics.get_mut(topic).unwrap().partitions.get_mut(id as usize).unwrap().messages;
         if offset as usize >= v.len() {
             return Vec::new()
         }
