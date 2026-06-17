@@ -30,14 +30,12 @@ impl LogStorage {
         let mut v = Vec::new();
         let mut messages = Vec::new();
         let mut count = 0;
-        println!("{:?}",self.file);
         self.file.seek(SeekFrom::Start(0));
         self.file.read_to_end(&mut v);
         for i in 0..v.len() {
             if v[i] == b'\n' {
                 let s = str::from_utf8(&v[count..i]).unwrap();
                 count = i + 1;
-                println!("{:?}", s);
                 let (offset, payload) = s.split_once("|").unwrap();
                 messages.push(Message {
                     offset: offset.parse().unwrap(),

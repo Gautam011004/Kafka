@@ -24,10 +24,8 @@ impl Broker {
     pub fn publish(&mut self, topic: &str, payload: String, id: u32) {
         let v = match self.topics.get_mut(topic) {
             Some(value) => {
-                println!("here 2");
                 let s = match value.partitions.get_mut(id as usize) {
                     Some(v) => {
-                        println!("here");
                         v.storage.load();
                         v
                     },
@@ -63,7 +61,6 @@ impl Broker {
             offset: s,
             payload
         };
-        println!("{:?}", new);
         v.messages.push(new.clone());
         logs.append(&new);
     }

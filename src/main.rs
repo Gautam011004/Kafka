@@ -1,14 +1,14 @@
 use std::sync::Arc;
-
 use bytes::BytesMut;
-use tokio::{io::AsyncReadExt, net::{TcpListener, TcpStream}, sync::Mutex};
+use tokio::{ net::{TcpListener, TcpStream}, sync::Mutex};
 
-use crate::{handler::{parse_message, process_request}, types::Broker};
+use crate::{read_handler::{process_request, read_command}, types::Broker, write_handler::write_command};
 
 pub mod broker;
 pub mod storage;
-pub mod handler;
+pub mod read_handler;
 pub mod types;
+pub mod write_handler;
 
 #[tokio::main]
 async fn main() {
@@ -25,9 +25,16 @@ async fn main() {
 async fn handle_connection(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) {
     let mut buf = BytesMut::with_capacity(512);
     loop {
-        let n = socket.read_buf(&mut buf).await.unwrap();
-        if n == 0 {
-            break;
+        let s = read_command(&mut socket, &mut buf).await;
+        match s {
+            Some(value) => {
+                let s = process_request(value.clone(),broker.clone()).await;
+                write_command(&mut socket, value, s).await;
+            },
+            None => {
+                println!("Disconnected");
+                break
+            }
         }
     }
 }
