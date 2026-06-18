@@ -26,7 +26,7 @@ impl Broker {
             Some(value) => {
                 let s = match value.partitions.get_mut(id as usize) {
                     Some(v) => {
-                        v.storage.load();
+                        v.messages = v.storage.load();
                         v
                     },
                     None => {
@@ -34,7 +34,7 @@ impl Broker {
                         let storage = LogStorage::new(&path);
                         value.partitions.push(Partitions { id, messages: Vec::new(), storage });
                         let v = value.partitions.get_mut(id as usize).unwrap();
-                        v.storage.load();
+                        v.messages = v.storage.load();
                         v
                     }
                 };
@@ -44,7 +44,7 @@ impl Broker {
                 self.create_topic(topic, id);
                 let s = self.topics.get_mut(topic).unwrap();
                 let v = s.partitions.get_mut(id as usize).unwrap();
-                v.storage.load();
+                v.messages = v.storage.load();
                 v
             }
         };
@@ -71,7 +71,19 @@ impl Broker {
         self.groups.entry(topic).or_insert_with(|| new);
     }
     pub fn consume(&mut self, offset: u64, topic: &str, id: u32) -> Vec<Message> {
-        let v = &self.topics.get_mut(topic).unwrap().partitions.get_mut(id as usize).unwrap().messages;
+        let v = match self.topics.get_mut(topic) {
+            Some(value) => {
+                let v = value.partitions.get_mut(id as usize).unwrap();
+                v.messages = v.storage.load();
+                &v.messages
+            },
+            None => {
+                self.create_topic(topic, id);
+                let v = self.topics.get_mut(topic).unwrap().partitions.get_mut(id as usize).unwrap();
+                v.messages = v.storage.load();
+                &v.messages
+            }
+        };
         if offset as usize >= v.len() {
             return Vec::new()
         }
